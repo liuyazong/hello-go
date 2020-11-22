@@ -4,92 +4,37 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"net"
 	"testing"
 	"time"
 )
 
-type Packer interface {
-	Pack() []byte
-}
-
-type UnPacker interface {
-	UnPack(data []byte)
-}
-
-type User struct {
-	id         int64
-	name       string
-	password   string
-	createDate time.Time
-	updateDate time.Time
-}
-
-func (user *User) String() string {
-	return fmt.Sprintf("User{id: %v, name: %v, password: %v, createDate: %v, udpateDate: %v}", user.id, user.name, user.password, user.createDate, user.updateDate)
-}
-
-func (user *User) Pack() []byte {
-
-	buffer := bytes.NewBuffer([]byte{})
-
-	_ = binary.Write(buffer, binary.BigEndian, &user.id)
-
-	var lth = int32(len(user.name))
-	_ = binary.Write(buffer, binary.BigEndian, &lth)
-	_ = binary.Write(buffer, binary.BigEndian, []byte(user.name))
-
-	lth = int32(len(user.password))
-	_ = binary.Write(buffer, binary.BigEndian, &lth)
-	_ = binary.Write(buffer, binary.BigEndian, []byte(user.password))
-
-	cd := user.createDate.Unix()
-	ud := user.updateDate.Unix()
-	_ = binary.Write(buffer, binary.BigEndian, &cd)
-	_ = binary.Write(buffer, binary.BigEndian, &ud)
-
-	return buffer.Bytes()
-}
-
-func (user *User) UnPack(data []byte) {
-
-	reader := bytes.NewReader(data)
-
-	_ = binary.Read(reader, binary.BigEndian, &user.id)
-
-	var lth int32
-	_ = binary.Read(reader, binary.BigEndian, &lth)
-	name := make([]byte, int(lth))
-	_ = binary.Read(reader, binary.BigEndian, &name)
-
-	_ = binary.Read(reader, binary.BigEndian, &lth)
-	password := make([]byte, int(lth))
-	_ = binary.Read(reader, binary.BigEndian, &password)
-
-	var cd int64
-	_ = binary.Read(reader, binary.BigEndian, &cd)
-
-	var ud int64
-	_ = binary.Read(reader, binary.BigEndian, &ud)
-
-	user.name = string(name)
-	user.password = string(password)
-	user.createDate = time.Unix(cd, 0)
-	user.updateDate = time.Unix(ud, 0)
-
-}
-
 func TestUser(t *testing.T) {
-	user := &User{1, "2", "3", time.Now(), time.Now()}
+	user := &User{1, "2", "3", time.Now().Local(), time.Now().Local()}
 	log.Println(user)
 	data := user.Pack()
-	log.Print(data)
 
-	user2 := &User{}
-	user2.UnPack(data)
-	log.Println(user2)
+	user = &User{}
+	user.UnPack(data)
+
+	req := &Request{service: "echo", data: user}
+
+	pack := req.Pack()
+	log.Println(pack)
+
+	req = &Request{data: &User{}}
+	req.UnPack(pack)
+	log.Println(req)
+
+	resp := &Response{status: 1, data: user}
+	pack = resp.Pack()
+	log.Println(pack)
+
+	resp = &Response{data: &User{}}
+	resp.UnPack(pack)
+	log.Println(resp)
+
 }
 
 func TestClient(t *testing.T) {
@@ -106,9 +51,10 @@ func TestClient(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			go func(i int) {
 
-				user := &User{int64(i), "2", "3", time.Now(), time.Now()}
+				user := &User{int64(i), "2", "3", time.Now().Local(), time.Now().Local()}
+				req := &Request{service: "echo", data: user}
 
-				data := user.Pack()
+				data := req.Pack()
 				lth := int32(len(data) + 4)
 
 				buffer := bytes.NewBuffer([]byte{})
@@ -144,8 +90,9 @@ func TestClient(t *testing.T) {
 		for scanner.Scan() {
 			data := scanner.Bytes()
 			user := &User{}
-			user.UnPack(data)
-			log.Printf("message [%v] from server %s", user, addr)
+			resp := &Response{data: user}
+			resp.UnPack(data)
+			log.Printf("message [%v] from server %s", resp, addr)
 		}
 	} else {
 		log.Fatal(err)

@@ -49,11 +49,14 @@ func TestServer(t *testing.T) {
 					data := scanner.Bytes()
 
 					user := &User{}
-					user.UnPack(data)
-					log.Printf("message [%v] from client %s", user, addr)
+					req := &Request{data: user}
+					req.UnPack(data)
+					log.Printf("message [%v] from client %s", req, addr)
 
 					user.id = user.id + 1
-					data = user.Pack()
+
+					resp := &Response{status: 1, data: user}
+					data = resp.Pack()
 
 					lth := int32(len(data) + 4)
 
